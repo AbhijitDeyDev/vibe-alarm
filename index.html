@@ -1,0 +1,694 @@
+<!--
+  Web Alarm Application
+  A fully-functional alarm manager using vanilla JavaScript, IndexedDB and the Notifications API.
+  Works offline – all assets in‑line.
+-->
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Vibe Alarm</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="icon" href="favicon.ico" type="image/x-icon" />
+        <link rel="manifest" href="manifest.json" />
+        <style>
+            :root {
+                --bg-color: #f5f5f5;
+                --text-color: #222;
+                --primary: #0066ff;
+                --secondary: #0099ff;
+                --card-bg: #fff;
+                --card-shadow: rgba(0, 0, 0, 0.1);
+                --modal-bg: rgba(0, 0, 0, 0.5);
+            }
+            :root[data-theme="dark"] {
+                --bg-color: #1e1e1e;
+                --text-color: #eee;
+                --card-bg: #2c2c2c;
+                --card-shadow: rgba(0, 0, 0, 0.5);
+            }
+            body {
+                margin: 0;
+                font-family: Arial, Helvetica, sans-serif;
+                background: var(--bg-color);
+                color: var(--text-color);
+            }
+            header {
+                padding: 1rem;
+                background: var(--primary);
+                color: #fff;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            header h1 {
+                margin: 0;
+                font-size: 1.5rem;
+            }
+            header .controls {
+                display: flex;
+                gap: 0.5rem;
+                align-items: center;
+            }
+            button {
+                background: var(--secondary);
+                color: #fff;
+                border: none;
+                border-radius: 4px;
+                padding: 0.5rem 1rem;
+                cursor: pointer;
+            }
+            button:hover {
+                opacity: 0.9;
+            }
+            main {
+                padding: 1rem;
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+                gap: 1rem;
+            }
+            .alarm-card {
+                background: var(--card-bg);
+                padding: 1rem;
+                border-radius: 6px;
+                box-shadow: 0 2px 4px var(--card-shadow);
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .alarm-time {
+                font-size: 1.5rem;
+                font-weight: bold;
+            }
+            .alarm-label {
+                font-size: 0.9rem;
+                color: gray;
+            }
+            .toggle {
+                position: absolute;
+                top: 0.5rem;
+                right: 0.5rem;
+                cursor: pointer;
+            }
+            .toggle input {
+                display: none;
+            }
+            .toggle span {
+                width: 40px;
+                height: 20px;
+                background: #ccc;
+                border-radius: 10px;
+                display: inline-block;
+                position: relative;
+                transition: background 0.2s;
+            }
+            .toggle span::after {
+                content: "";
+                width: 18px;
+                height: 18px;
+                background: #fff;
+                border-radius: 50%;
+                position: absolute;
+                top: 1px;
+                left: 1px;
+                transition: left 0.2s;
+            }
+            .toggle input:checked + span {
+                background: #4caf50;
+            }
+            .toggle input:checked + span::after {
+                left: 21px;
+            }
+            /* Modal */
+            .modal {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: var(--modal-bg);
+                align-items: center;
+                justify-content: center;
+                animation: fadeIn 0.2s forwards;
+            }
+            .modal[open] {
+                display: flex;
+            }
+            @keyframes fadeIn {
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
+            }
+            .modal-content {
+                background: var(--card-bg);
+                padding: 2rem;
+                box-sizing: border-box;
+                border-radius: 8px;
+                min-width: 300px;
+                width: 100%;
+                max-width: 400px;
+                box-shadow: 0 4px 8px var(--card-shadow);
+                animation: scaleIn 0.2s forwards;
+            }
+            @keyframes scaleIn {
+                from {
+                    transform: scale(0.8);
+                }
+                to {
+                    transform: scale(1);
+                }
+            }
+            .modal-content h2 {
+                margin-top: 0;
+            }
+            .modal-content label {
+                display: flex;
+                align-items: center;
+                margin-top: 0.5rem;
+                line-height: 1;
+                gap: 0.4rem;
+            }
+            .modal-content input,
+            .modal-content textarea {
+                width: 100%;
+                padding: 0.4rem;
+                margin-top: 0.2rem;
+                box-sizing: border-box;
+            }
+            /* Custom checkbox style */
+            .modal-content input[type="checkbox"] {
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                appearance: none;
+                display: inline-block;
+                width: 18px;
+                height: 18px;
+                border: 2px solid #777;
+                border-radius: 4px;
+                position: relative;
+                margin: 0;
+                cursor: pointer;
+                background-color: #fff;
+                outline: none;
+                margin-right: 0.4rem;
+            }
+            .modal-content input[type="checkbox"]:checked {
+                background: var(--primary);
+                border-color: var(--primary);
+            }
+            .modal-content input[type="checkbox"]:checked::after {
+                content: "";
+                position: absolute;
+                left: 4px;
+                top: 1px;
+                width: 5px;
+                height: 10px;
+                border: solid #fff;
+                border-width: 0 2px 2px 0;
+                transform: rotate(45deg);
+            }
+            .modal-actions {
+                margin-top: 1rem;
+                display: flex;
+                gap: 0.5rem;
+                justify-content: flex-end;
+            }
+
+            @keyframes swing {
+                0% {
+                    transform: rotate(0deg);
+                }
+                20% {
+                    transform: rotate(15deg);
+                }
+                40% {
+                    transform: rotate(-15deg);
+                }
+                60% {
+                    transform: rotate(10deg);
+                }
+                80% {
+                    transform: rotate(-10deg);
+                }
+                100% {
+                    transform: rotate(0deg);
+                }
+            }
+            .bell {
+                position: absolute;
+                top: 1rem;
+                left: 5.5rem;
+                font-size: 1.5rem;
+                animation: swing 1s infinite;
+            }
+            @media (max-width: 600px) {
+                header {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    padding: 1rem;
+                }
+                header h1 {
+                    font-size: 1.2rem;
+                    margin-bottom: 0.5rem;
+                }
+                .controls {
+                    gap: 0.3rem;
+                    flex-wrap: wrap;
+                }
+                .controls button,
+                .controls span {
+                    font-size: 0.9rem;
+                    padding: 0.3rem 0.6rem;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>Vibe Alarm</h1>
+            <div class="controls">
+                <span
+                    id="digital-clock"
+                    style="margin-right: 0.5rem; font-weight: bold"
+                ></span>
+                <span id="next-alarm"></span>
+                <button id="theme-toggle" aria-label="Toggle dark mode">
+                    🌓
+                </button>
+                <button id="add-alarm">Add Alarm</button>
+                <button id="install-btn" style="display: none">Install</button>
+            </div>
+        </header>
+        <main id="alarm-list"></main>
+
+        <!-- Modal -->
+        <div
+            class="modal"
+            id="alarm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
+        >
+            <div class="modal-content">
+                <h2 id="modal-title">Add Alarm</h2>
+                <form id="alarm-form">
+                    <label for="alarm-time">Time</label>
+                    <input type="time" id="alarm-time" required />
+
+                    <label for="alarm-label">Label (optional)</label>
+                    <input
+                        type="text"
+                        id="alarm-label"
+                        placeholder="e.g. Wake up"
+                    />
+
+                    <label for="alarm-repeat">
+                        <input type="checkbox" id="alarm-repeat" />
+                        Repeat daily
+                    </label>
+
+                    <label for="alarm-enabled">
+                        <input type="checkbox" id="alarm-enabled" checked />
+                        Enabled
+                    </label>
+
+                    <div class="modal-actions">
+                        <button type="button" id="cancel-btn">Cancel</button>
+                        <button type="submit" id="save-btn">Save</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            "use strict";
+            // ==================== IndexedDB Helper ====================
+            const DB_NAME = "alarmDB";
+            const DB_STORE = "alarms";
+            const DB_VERSION = 1;
+
+            function openDB() {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+                    request.onupgradeneeded = () => {
+                        const db = request.result;
+                        if (!db.objectStoreNames.contains(DB_STORE)) {
+                            const store = db.createObjectStore(DB_STORE, {
+                                keyPath: "id",
+                                autoIncrement: true,
+                            });
+                            store.createIndex("time", "time", {
+                                unique: false,
+                            });
+                        }
+                    };
+                    request.onsuccess = () => resolve(request.result);
+                    request.onerror = () => reject(request.error);
+                });
+            }
+
+            async function getAllAlarms() {
+                const db = await openDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(DB_STORE, "readonly");
+                    const store = tx.objectStore(DB_STORE);
+                    const req = store.getAll();
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            async function addAlarm(alarm) {
+                const db = await openDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(DB_STORE, "readwrite");
+                    const store = tx.objectStore(DB_STORE);
+                    const req = store.add(alarm);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            async function updateAlarm(alarm) {
+                const db = await openDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(DB_STORE, "readwrite");
+                    const store = tx.objectStore(DB_STORE);
+                    const req = store.put(alarm);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            async function deleteAlarm(id) {
+                const db = await openDB();
+                return new Promise((resolve, reject) => {
+                    const tx = db.transaction(DB_STORE, "readwrite");
+                    const store = tx.objectStore(DB_STORE);
+                    const req = store.delete(id);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            // ==================== Notification & Sound ====================
+            // Use an external audio file for the alarm sound.
+
+            async function ensureNotificationPermission() {
+                if (Notification.permission === "default") {
+                    await Notification.requestPermission();
+                }
+            }
+
+            async function showAlarmNotification(alarm) {
+                await ensureNotificationPermission();
+                if (Notification.permission !== "granted") return;
+                const notif = new Notification("Alarm", {
+                    body: alarm.label || `Alarm set for ${alarm.time}`,
+                    tag: `alarm-${alarm.id}`,
+                    renotify: true,
+                });
+
+                // Mark alarm as ringing to show bell icon via renderAlarms
+                const active = alarms.find((a) => a.id === alarm.id);
+                if (active) {
+                    active.isRinging = true;
+                    renderAlarms();
+                    // Clear after 5 seconds
+                    setTimeout(() => {
+                        active.isRinging = false;
+                        renderAlarms();
+                    }, 5000);
+                }
+
+                // Play external alarm sound
+                const alarmAudio = new Audio(
+                    "https://www.soundjay.com/misc_c2026/bell-ringing-01c.mp3",
+                );
+                alarmAudio.play();
+                notif.onclick = () => notif.close();
+            }
+
+            // ==================== UI Rendering ====================
+            const alarmListEl = document.getElementById("alarm-list");
+            const nextAlarmEl = document.getElementById("next-alarm");
+            let alarms = [];
+
+            function renderAlarms() {
+                alarmListEl.innerHTML = "";
+                alarms.forEach((alarm) => {
+                    const card = document.createElement("div");
+                    card.className = "alarm-card";
+                    card.setAttribute("data-id", alarm.id);
+
+                    const timeEl = document.createElement("div");
+                    timeEl.className = "alarm-time";
+                    timeEl.textContent = alarm.time;
+                    card.appendChild(timeEl);
+
+                    if (alarm.label) {
+                        const labelEl = document.createElement("div");
+                        labelEl.className = "alarm-label";
+                        labelEl.textContent = alarm.label;
+                        card.appendChild(labelEl);
+                    }
+
+                    // If this alarm is currently ringing, show the bell icon
+                    if (alarm.isRinging) {
+                        const bell = document.createElement("span");
+                        bell.className = "bell";
+                        bell.textContent = "🔔";
+                        card.appendChild(bell);
+                    }
+
+                    const repeatEl = document.createElement("div");
+                    repeatEl.textContent = alarm.repeat
+                        ? "Repeats daily"
+                        : "Once";
+                    card.appendChild(repeatEl);
+
+                    const toggleDiv = document.createElement("div");
+                    toggleDiv.className = "toggle";
+                    toggleDiv.innerHTML = `
+          <label>
+            <input type="checkbox" ${alarm.enabled ? "checked" : ""}>
+            <span></span>
+          </label>
+        `;
+                    toggleDiv
+                        .querySelector("input")
+                        .addEventListener("change", async (e) => {
+                            alarm.enabled = e.target.checked;
+                            await updateAlarm(alarm);
+                            scheduleAlarms();
+                            renderAlarms();
+                        });
+                    card.appendChild(toggleDiv);
+
+                    const editBtn = document.createElement("button");
+                    editBtn.textContent = "Edit";
+                    editBtn.addEventListener("click", () => openModal(alarm));
+                    card.appendChild(editBtn);
+
+                    const delBtn = document.createElement("button");
+                    delBtn.textContent = "Delete";
+                    delBtn.addEventListener("click", async () => {
+                        await deleteAlarm(alarm.id);
+                        loadAlarms();
+                    });
+                    card.appendChild(delBtn);
+
+                    alarmListEl.appendChild(card);
+                });
+                updateNextAlarmDisplay();
+            }
+
+            function updateNextAlarmDisplay() {
+                const now = new Date();
+                const upcoming = alarms
+                    .filter((a) => a.enabled)
+                    .map((a) => ({
+                        alarm: a,
+                        ts: getNextTrigger(a, now),
+                    }))
+                    .filter((o) => o.ts !== null)
+                    .sort((a, b) => a.ts - b.ts)[0];
+                if (upcoming) {
+                    const diff = Math.round((upcoming.ts - now) / 60000);
+                    nextAlarmEl.textContent = `Next: ${upcoming.alarm.time} (${diff} min)`;
+                } else {
+                    nextAlarmEl.textContent = "No upcoming alarms";
+                }
+            }
+
+            // ==================== Time Helpers ====================
+            function parseTimeToDate(timeStr, baseDate) {
+                const [hh, mm] = timeStr.split(":").map(Number);
+                const d = new Date(baseDate);
+                d.setHours(hh, mm, 0, 0);
+                return d;
+            }
+
+            function getNextTrigger(alarm, fromDate = new Date()) {
+                if (!alarm.enabled) return null;
+                const candidate = parseTimeToDate(alarm.time, fromDate);
+                if (candidate > fromDate) return candidate;
+                if (alarm.repeat) {
+                    // next day
+                    candidate.setDate(candidate.getDate() + 1);
+                    return candidate;
+                }
+                return null; // past one‑off alarm
+            }
+
+            // ==================== Scheduler ====================
+            let schedulerTimer = null;
+
+            function scheduleAlarms() {
+                if (schedulerTimer) clearTimeout(schedulerTimer);
+                const now = new Date();
+                const upcoming = alarms
+                    .filter((a) => a.enabled)
+                    .map((a) => ({
+                        alarm: a,
+                        ts: getNextTrigger(a, now),
+                    }))
+                    .filter((o) => o.ts !== null)
+                    .sort((a, b) => a.ts - b.ts)[0];
+                if (upcoming) {
+                    const delay = Math.max(0, upcoming.ts - now);
+                    schedulerTimer = setTimeout(async () => {
+                        await showAlarmNotification(upcoming.alarm);
+                        if (!upcoming.alarm.repeat) {
+                            upcoming.alarm.enabled = false;
+                            await updateAlarm(upcoming.alarm);
+                        }
+                        renderAlarms();
+                    }, delay);
+                }
+            }
+
+            // ==================== Modal Management ====================
+            const modal = document.getElementById("alarm-modal");
+            const form = document.getElementById("alarm-form");
+            const cancelBtn = document.getElementById("cancel-btn");
+            let editTarget = null; // null for create
+
+            function openModal(alarm = null) {
+                editTarget = alarm;
+                document.getElementById("modal-title").textContent = alarm
+                    ? "Edit Alarm"
+                    : "Add Alarm";
+                form.reset();
+                if (alarm) {
+                    document.getElementById("alarm-time").value = alarm.time;
+                    document.getElementById("alarm-label").value =
+                        alarm.label || "";
+                    document.getElementById("alarm-repeat").checked =
+                        alarm.repeat;
+                    document.getElementById("alarm-enabled").checked =
+                        alarm.enabled;
+                }
+                modal.setAttribute("open", "");
+                // focus trap
+                const focusable = modal.querySelectorAll("input,button");
+                focusable[0].focus();
+            }
+
+            function closeModal() {
+                modal.removeAttribute("open");
+            }
+
+            cancelBtn.addEventListener("click", (e) => {
+                e.preventDefault();
+                closeModal();
+            });
+
+            form.addEventListener("submit", async (e) => {
+                e.preventDefault();
+                const time = document.getElementById("alarm-time").value;
+                const label = document
+                    .getElementById("alarm-label")
+                    .value.trim();
+                const repeat = document.getElementById("alarm-repeat").checked;
+                const enabled =
+                    document.getElementById("alarm-enabled").checked;
+                if (!time) return;
+                const alarmData = { time, label, repeat, enabled };
+                if (editTarget) {
+                    alarmData.id = editTarget.id;
+                    await updateAlarm(alarmData);
+                } else {
+                    await addAlarm(alarmData);
+                }
+                closeModal();
+                loadAlarms();
+            });
+
+            // ==================== Theme Toggle ====================
+            const themeBtn = document.getElementById("theme-toggle");
+            function applyTheme(theme) {
+                document.documentElement.dataset.theme = theme;
+                localStorage.setItem("theme", theme);
+            }
+            themeBtn.addEventListener("click", () => {
+                const newTheme =
+                    document.documentElement.dataset.theme === "dark"
+                        ? "light"
+                        : "dark";
+                applyTheme(newTheme);
+            });
+            // Initialise theme
+            const savedTheme = localStorage.getItem("theme") || "light";
+            applyTheme(savedTheme);
+            // Register service worker for PWA
+            if ("serviceWorker" in navigator) {
+                navigator.serviceWorker.register("sw.js");
+            }
+            // Digital clock
+            function updateDigitalClock() {
+                const now = new Date();
+                const hh = String(now.getHours()).padStart(2, "0");
+                const mm = String(now.getMinutes()).padStart(2, "0");
+                const ss = String(now.getSeconds()).padStart(2, "0");
+                const clockEl = document.getElementById("digital-clock");
+                if (clockEl) clockEl.textContent = `${hh}:${mm}:${ss}`;
+            }
+            updateDigitalClock();
+            setInterval(updateDigitalClock, 1000);
+
+            // PWA install prompt handling
+            let deferredPrompt;
+            window.addEventListener("beforeinstallprompt", (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                const installBtn = document.getElementById("install-btn");
+                installBtn.style.display = "inline-block";
+                installBtn.addEventListener("click", async () => {
+                    installBtn.style.display = "none";
+                    if (deferredPrompt) {
+                        deferredPrompt.prompt();
+                        const { outcome } = await deferredPrompt.userChoice;
+                        deferredPrompt = null;
+                    }
+                });
+            });
+
+            // ==================== Load & Init ====================
+            async function loadAlarms() {
+                alarms = await getAllAlarms();
+                renderAlarms();
+                scheduleAlarms();
+            }
+
+            document
+                .getElementById("add-alarm")
+                .addEventListener("click", () => openModal());
+
+            // Start
+            loadAlarms();
+        </script>
+    </body>
+</html>
