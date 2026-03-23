@@ -9,7 +9,37 @@
         <meta charset="UTF-8" />
         <title>Vibe Alarm</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta
+            name="description"
+            content="A web-based alarm clock with PWA support. Set alarms, customize themes, and get notified with vibration. Works offline and can be installed on any device."
+        />
+        <meta
+            name="keywords"
+            content="alarm, clock, web alarm, pwa, offline alarm, mobile alarm, snooze"
+        />
+        <meta name="author" content="Vibe Alarm" />
+        <meta name="theme-color" content="#0066ff" />
+        <meta property="og:title" content="Vibe Alarm" />
+        <meta
+            property="og:description"
+            content="A web-based alarm clock with PWA support. Set alarms, customize themes, and get notified with vibration."
+        />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="Vibe Alarm" />
+        <meta
+            name="twitter:description"
+            content="A web-based alarm clock with PWA support. Set alarms, customize themes, and get notified with vibration."
+        />
         <link rel="icon" href="favicon.ico" type="image/x-icon" />
+        <!-- iOS PWA meta tags -->
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta
+            name="apple-mobile-web-app-status-bar-style"
+            content="black-translucent"
+        />
+        <meta name="apple-mobile-web-app-title" content="Vibe Alarm" />
+        <link rel="apple-touch-icon" href="icons/icon-192.png" />
         <link rel="manifest" href="manifest.json" />
         <style>
             :root {
@@ -281,6 +311,7 @@
                 <button id="install-btn" style="display: none">Install</button>
             </div>
         </header>
+
         <main id="alarm-list"></main>
 
         <!-- Modal -->
@@ -661,20 +692,82 @@
 
             // PWA install prompt handling
             let deferredPrompt;
+
+            // Show install button on desktop browsers that fire beforeinstallprompt
             window.addEventListener("beforeinstallprompt", (e) => {
                 e.preventDefault();
                 deferredPrompt = e;
                 const installBtn = document.getElementById("install-btn");
-                installBtn.style.display = "inline-block";
-                installBtn.addEventListener("click", async () => {
-                    installBtn.style.display = "none";
-                    if (deferredPrompt) {
-                        deferredPrompt.prompt();
-                        const { outcome } = await deferredPrompt.userChoice;
-                        deferredPrompt = null;
-                    }
-                });
+                if (installBtn) {
+                    installBtn.style.display = "inline-block";
+                    installBtn.addEventListener("click", async () => {
+                        installBtn.style.display = "none";
+                        if (deferredPrompt) {
+                            deferredPrompt.prompt();
+                            const { outcome } = await deferredPrompt.userChoice;
+                            deferredPrompt = null;
+                        }
+                    });
+                }
             });
+
+            // For mobile browsers (Android/iOS), show installation instructions
+            // since they don't use beforeinstallprompt the same way
+            function isIOS() {
+                return (
+                    /iPhone|iPad|iPod/.test(navigator.userAgent) &&
+                    !window.MSStream
+                );
+            }
+
+            function isAndroid() {
+                return /Android/.test(navigator.userAgent);
+            }
+
+            function showMobileInstallInstructions() {
+                const installBtn = document.getElementById("install-btn");
+                if (!installBtn) return;
+
+                // Only show instructions if beforeinstallprompt didn't fire
+                // (meaning we're on mobile where it typically doesn't fire)
+                if (!deferredPrompt && (isIOS() || isAndroid())) {
+                    // Show install button with instructions
+                    installBtn.style.display = "inline-block";
+
+                    if (isIOS()) {
+                        installBtn.textContent = "Add to Home Screen";
+                        installBtn.title =
+                            "Tap to learn how to install this app";
+                        installBtn.addEventListener(
+                            "click",
+                            () => {
+                                alert(
+                                    "To install this app on your iPhone/iPad:\n\n1. Tap the Share button (square with arrow) at the bottom of the screen\n2. Select 'Add to Home Screen'",
+                                );
+                            },
+                            { once: true },
+                        );
+                    } else if (isAndroid()) {
+                        // For Android Chrome, it usually shows native prompt
+                        // But we can guide users if it doesn't
+                        installBtn.textContent = "Install App";
+                        installBtn.title =
+                            "Tap to install this app on your device";
+                        installBtn.addEventListener(
+                            "click",
+                            () => {
+                                alert(
+                                    "To install this app on your Android device:\n\n1. Open this site in Chrome\n2. Tap the three dots menu (top right)\n3. Select 'Install app' or 'Add to home screen'",
+                                );
+                            },
+                            { once: true },
+                        );
+                    }
+                }
+            }
+
+            // Check for mobile installation options after page loads
+            window.addEventListener("load", showMobileInstallInstructions);
 
             // ==================== Load & Init ====================
             async function loadAlarms() {
