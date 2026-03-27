@@ -115,6 +115,49 @@
                 font-size: 0.9rem;
                 color: gray;
             }
+            .empty-state {
+                grid-column: 1 / -1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 400px;
+                text-align: center;
+                padding: 2rem;
+            }
+            .empty-state-icon {
+                font-size: 4rem;
+                margin-bottom: 1rem;
+                opacity: 0.5;
+            }
+            .empty-state-title {
+                font-size: 1.5rem;
+                font-weight: bold;
+                margin-bottom: 0.5rem;
+                color: var(--text-color);
+            }
+            .empty-state-description {
+                font-size: 1rem;
+                color: gray;
+                margin-bottom: 1.5rem;
+                max-width: 300px;
+            }
+            .empty-state-button {
+                background: var(--primary);
+                color: #fff;
+                border: none;
+                border-radius: 8px;
+                padding: 0.75rem 2rem;
+                font-size: 1.1rem;
+                cursor: pointer;
+                transition:
+                    transform 0.2s,
+                    opacity 0.2s;
+            }
+            .empty-state-button:hover {
+                opacity: 0.9;
+                transform: scale(1.05);
+            }
             .toggle {
                 position: absolute;
                 top: 0.5rem;
@@ -469,6 +512,31 @@
 
             function renderAlarms() {
                 alarmListEl.innerHTML = "";
+
+                // Show empty state if no alarms
+                if (alarms.length === 0) {
+                    const emptyState = document.createElement("div");
+                    emptyState.className = "empty-state";
+                    emptyState.innerHTML = `
+                        <div class="empty-state-icon">⏰</div>
+                        <div class="empty-state-title">No Alarms Set</div>
+                        <div class="empty-state-description">
+                            You haven't set any alarms yet. Create your first alarm to never miss an important moment.
+                        </div>
+                        <button class="empty-state-button" id="empty-add-alarm">
+                            Add Your First Alarm
+                        </button>
+                    `;
+                    alarmListEl.appendChild(emptyState);
+
+                    // Add click handler for the empty state button
+                    document
+                        .getElementById("empty-add-alarm")
+                        .addEventListener("click", () => openModal());
+
+                    return;
+                }
+
                 alarms.forEach((alarm) => {
                     const card = document.createElement("div");
                     card.className = "alarm-card";
